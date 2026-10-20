@@ -1,5 +1,6 @@
 #pragma once
 #include "raylib.h"
+#include <SFML/Window/WindowEnums.hpp>
 #include <atomic>
 #include <cmath>
 #include <vector>
@@ -49,13 +50,15 @@ struct PhysicalPoint
 
 struct Constraint
 {
-    Constraint(int id1, int id2, float dist)
-    :id1(id1), id2(id2), dist(dist)
+    Constraint(int id1, int id2, float dist, float influence1, float influence2)
+    :id1(id1), id2(id2), dist(dist), influence1(influence1), influence2(influence2)
     {
     }
     float dist;
     int id1;
     int id2;
+    float influence1;
+    float influence2;
 };
 
 class PhysicalSolver
@@ -67,13 +70,17 @@ class PhysicalSolver
             return points.size()-1;
         }
 
-        int addConstraint(int id1, int id2)
+        int addConstraint(int id1, int id2, float influence1, float influence2)
         {
             constraints.push_back(
                 Constraint(
                     id1,
                     id2,
-                    length(points[id1].pos - points[id2].pos)));
+                    length(points[id1].pos - points[id2].pos),
+                    influence1,
+                    influence2
+                ));
+
             return constraints.size()-1;
         }
 
@@ -130,9 +137,9 @@ class PhysicalSolver
                 {
                     Vector2 diffNormalized = diff / dist;
                     if(!p2.isStatic)
-                        p2.pos = p2.pos + diffNormalized * (-distDiff * 0.5f);
+                        p2.pos = p2.pos + diffNormalized * (-distDiff * c.influence1);
                     if(!p1.isStatic)
-                        p1.pos = p1.pos - diffNormalized * (-distDiff * 0.5f);
+                        p1.pos = p1.pos - diffNormalized * (-distDiff * c.influence2);
                 }
             }
 
@@ -177,9 +184,9 @@ class Slugcat
             points.push_back(solver.addPoint(PhysicalPoint({halfScreen+headToBodyDist, halfScreen}, bodyRadius)));
             points.push_back(solver.addPoint(PhysicalPoint({halfScreen + headToBodyDist + tailDist * 1.f, halfScreen}, tail1Radius)));
             points.push_back(solver.addPoint(PhysicalPoint({halfScreen + headToBodyDist + tailDist * 2.f, halfScreen}, tail2Radius)));
-            constraints.push_back(solver.addConstraint(0, 1));
-            constraints.push_back(solver.addConstraint(1, 2));
-            constraints.push_back(solver.addConstraint(2, 3));
+            constraints.push_back(solver.addConstraint(0, 1, 0.5, 0.5));
+            constraints.push_back(solver.addConstraint(1, 2, 1.0, 0.0));
+            constraints.push_back(solver.addConstraint(2, 3, 0.5, 0.5));
             SetConfigFlags(FLAG_WINDOW_TRANSPARENT | FLAG_WINDOW_UNDECORATED);
             InitWindow(screenWidth, screenHeight, "skug");
         }
@@ -238,9 +245,9 @@ class Slugcat
                 {
                     float eyeSpacingHorizontal = 0.4;
                     float eyeSpacingVertical = 0.3;
-                    Vector2 ear = offsetFromVectors(angleVec, angleVecVertical, p1.pos, {-p1.radius * 0.7f, p1.radius * 1.f});
+                    Vector2 ear = offsetFromVectors(angleVec, angleVecVertical, p1.pos, {-p1.radius * 0.7f, p1.radius * 0.8f});
                     DrawCircle(ear.x, ear.y, 0.25*bodyRadius, WHITE);
-                    ear = offsetFromVectors(angleVec, angleVecVertical, p1.pos, {p1.radius * 0.7f, p1.radius * 1.f});
+                    ear = offsetFromVectors(angleVec, angleVecVertical, p1.pos, {p1.radius * 0.7f, p1.radius * 0.8f});
                     DrawCircle(ear.x, ear.y, 0.25*bodyRadius, WHITE);
                     Vector2 eye = offsetFromVectors(angleVec, angleVecVertical, p1.pos, {-p1.radius * eyeSpacingHorizontal, p1.radius * eyeSpacingVertical});
                     DrawCircle(eye.x, eye.y, 0.25*bodyRadius, BLACK);
@@ -248,9 +255,20 @@ class Slugcat
                     DrawCircle(eye.x, eye.y, 0.25*bodyRadius, BLACK);
 
                 }
-                //DrawTriangle(p2.pos + angleVec * p2.radius, p2.pos - angleVec * p2.radius, p1.pos - angleVec * p1.radius, YELLOW);
             }
         }
+
+
+        //TODO have custom virtual STATE struct with update function that returns an int stating the State for next frame
+        enum STATE
+        {
+            STUNNED,
+            DEAD,
+            IDLE,
+            WALKING,
+            EATING,
+            HUNTING
+        };
 
         enum PART
         {
